@@ -48,7 +48,7 @@ def main():
         f.write(str(last_seen))
 
     # Compile RSS
-    urls = db.since(last_updated, min_count=1)
+    urls = db.since(last_updated, min_count=config.MIN_COUNT)
     if urls:
         try:
             feed = json.load(open('data/feed'))

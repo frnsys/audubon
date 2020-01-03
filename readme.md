@@ -3,6 +3,7 @@
 ```python
 # config.py
 
+MIN_COUNT = 2
 UPDATE_INTERVAL = 20 # minutes
 LISTS = ['frnsys/climate']
 RSS_PATH = 'twitter.xml'
