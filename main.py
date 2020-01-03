@@ -6,6 +6,7 @@ from db import Database
 from datetime import datetime
 from metadata import get_metadata
 from PyRSS2Gen import RSS2, RSSItem
+from requests.exceptions import HTTPError
 from apscheduler.schedulers.blocking import BlockingScheduler
 
 auth = tweepy.OAuthHandler(config.CONSUMER_KEY, config.CONSUMER_SECRET)
@@ -13,6 +14,7 @@ auth.set_access_token(config.ACCESS_TOKEN, config.ACCESS_TOKEN_SECRET)
 api = tweepy.API(auth)
 
 def main():
+    print('Running...')
     db = Database('data/db')
 
     last_seen = util.try_load('data/last_seen', int, None)
@@ -36,7 +38,11 @@ def main():
             url = url['expanded_url']
             if util.is_twitter_url(url): continue
 
-            meta = get_metadata(url)
+            try:
+                meta = get_metadata(url)
+            except HTTPError:
+                continue
+
             url = meta['url']
             if util.is_twitter_url(url): continue
 
@@ -55,8 +61,15 @@ def main():
         except FileNotFoundError:
             feed = []
 
+        seen = [i['link'] for i in feed]
+
         for url, users, _, _ in urls:
-            meta = get_metadata(url)
+            if url in seen: continue
+            try:
+                meta = get_metadata(url)
+            except HTTPError:
+                continue
+
             feed.append({
                 'title': meta['title'],
                 'link': url,
@@ -84,9 +97,12 @@ def main():
             f.write(str(datetime.now().timestamp()))
         with open('data/feed', 'w') as f:
             json.dump(feed, f)
+    print('Done')
 
 
 if __name__ == '__main__':
+    main()
+
     scheduler = BlockingScheduler()
     scheduler.add_job(main, trigger='interval', minutes=config.UPDATE_INTERVAL)
     scheduler.start()
