@@ -2,19 +2,26 @@ import json
 import util
 import config
 import tweepy
+import logging
 from db import Database
 from datetime import datetime
 from metadata import get_metadata
 from PyRSS2Gen import RSS2, RSSItem
-from requests.exceptions import HTTPError
 from apscheduler.schedulers.blocking import BlockingScheduler
 
 auth = tweepy.OAuthHandler(config.CONSUMER_KEY, config.CONSUMER_SECRET)
 auth.set_access_token(config.ACCESS_TOKEN, config.ACCESS_TOKEN_SECRET)
 api = tweepy.API(auth)
 
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s:%(levelname)s:%(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S %Z')
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+
 def main():
-    print('Running...')
+    logger.info('Running...')
     db = Database('data/db')
 
     last_seen = util.try_load('data/last_seen', int, None)
@@ -40,7 +47,8 @@ def main():
 
             try:
                 meta = get_metadata(url)
-            except HTTPError:
+            except Exception as e:
+                logger.info('Error getting metadata for {}: {}'.format(url, e))
                 continue
 
             url = meta['url']
@@ -67,7 +75,8 @@ def main():
             if url in seen: continue
             try:
                 meta = get_metadata(url)
-            except HTTPError:
+            except Exception as e:
+                logger.info('Error getting metadata for {}: {}'.format(url, e))
                 continue
 
             feed.append({
@@ -97,7 +106,7 @@ def main():
             f.write(str(datetime.now().timestamp()))
         with open('data/feed', 'w') as f:
             json.dump(feed, f)
-    print('Done')
+    logger.info('Done')
 
 
 if __name__ == '__main__':

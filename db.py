@@ -31,3 +31,9 @@ class Database:
     def users(self, url):
         users, = self.cur.execute('SELECT users FROM urls WHERE url == ?', (url,)).fetchone()
         return users.split(',') if users else []
+
+
+if __name__ == '__main__':
+    db = Database('data/db')
+    for r in db.since(0):
+        print(r)
