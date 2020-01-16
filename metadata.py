@@ -14,7 +14,7 @@ def get_metadata(url):
     resp = requests.get(url)
     resp.raise_for_status()
 
-    html = lxml.html.fromstring(resp.content)
+    html = lxml.html.fromstring(resp.content.decode('utf8'))
     tags = html.cssselect('meta[property], meta[name]')
 
     meta = {}

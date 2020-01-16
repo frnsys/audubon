@@ -3,10 +3,11 @@ import util
 import config
 import tweepy
 import logging
+from dateutil import tz
 from db import Database
 from datetime import datetime
 from metadata import get_metadata
-from PyRSS2Gen import RSS2, RSSItem
+from feedgen.feed import FeedGenerator
 from apscheduler.schedulers.blocking import BlockingScheduler
 
 auth = tweepy.OAuthHandler(config.CONSUMER_KEY, config.CONSUMER_SECRET)
@@ -27,10 +28,15 @@ def main():
     last_seen = util.try_load('data/last_seen', int, None)
     last_updated = util.try_load('data/last_updated', float, 0)
 
-    tweets = api.home_timeline(count=200, since_id=last_seen)
-    for list in config.LISTS:
-        user, slug = list.split('/')
-        tweets += api.list_timeline(slug=slug, owner_screen_name=user, since_id=last_seen)
+    tweets = []
+    try:
+        tweets += api.home_timeline(count=200, since_id=last_seen)
+        for list in config.LISTS:
+            user, slug = list.split('/')
+            tweets += api.list_timeline(slug=slug, owner_screen_name=user, since_id=last_seen)
+    except tweepy.error.RateLimitError:
+        logger.info('Rate limited')
+    logger.info('{} new tweets'.format(len(tweets)))
 
     for t in tweets:
         user = t.user.screen_name
@@ -54,6 +60,7 @@ def main():
             url = meta['url']
             if util.is_twitter_url(url): continue
 
+            logger.info('@{}: {}'.format(user, url))
             db.inc(url, user)
 
         if last_seen is None or t.id > last_seen: last_seen = t.id
@@ -62,6 +69,10 @@ def main():
         f.write(str(last_seen))
 
     # Compile RSS
+    fg = FeedGenerator()
+    fg.link(href=config.URL)
+    fg.description('twitter chitter')
+    fg.title('twitter chitter')
     urls = db.since(last_updated, min_count=config.MIN_COUNT)
     if urls:
         try:
@@ -73,6 +84,8 @@ def main():
 
         for url, users, _, _ in urls:
             if url in seen: continue
+
+            logger.info('Adding: {}'.format(url))
             try:
                 meta = get_metadata(url)
             except Exception as e:
@@ -83,24 +96,17 @@ def main():
                 'title': meta['title'],
                 'link': url,
                 'description': '[Saved by {}]\t{}'.format(users, meta['description']),
-                'pubDate': datetime.now().isoformat()
+                'pubDate': datetime.now(tz.tzlocal()).isoformat()
             })
 
-        items=[RSSItem(
-            title=item['title'],
-            link=item['link'],
-            description=item['description'],
-            pubDate=item['pubDate']
-        ) for item in feed[::-1]]
+        for item in feed[::-1]:
+            fe = fg.add_entry()
+            fe.title(item['title'])
+            fe.link(href=item['link'])
+            fe.description(item['description'])
+            fe.pubDate(item['pubDate'])
 
-        rss = RSS2(
-            title='twitter chitter',
-            description='twitter chitter',
-            link=config.URL,
-            lastBuildDate=datetime.now(),
-            items=items)
-
-        rss.write_xml(open(config.RSS_PATH, 'w'))
+        fg.rss_file(config.RSS_PATH)
 
         with open('data/last_updated', 'w') as f:
             f.write(str(datetime.now().timestamp()))
