@@ -25,21 +25,33 @@ def main():
     logger.info('Running...')
     db = Database('data/db')
 
-    last_seen = util.try_load('data/last_seen', int, None)
-    last_updated = util.try_load('data/last_updated', float, 0)
+    now = datetime.now().timestamp()
+    last_seen = util.try_load_json('data/last_seen')
+    last_updated = util.try_load_json('data/last_updated')
+    last_update = max(last_updated.values()) if last_updated else 0
+
+    users = list(tweepy.Cursor(api.friends_ids).items())
+    for l in config.LISTS:
+        user, slug = l.split('/')
+        users += [u.id for u in tweepy.Cursor(api.list_members, slug=slug, owner_screen_name=user).items()]
+    users = set(users)
+    users = {u: last_updated.get(u) for u in users}
+    users = sorted(list(users), key=lambda u: last_seen.get(u, -1))
+    logger.info('{} users'.format(len(users)))
 
     tweets = []
     try:
-        tweets += api.home_timeline(count=200, since_id=last_seen)
-        for list in config.LISTS:
-            user, slug = list.split('/')
-            tweets += api.list_timeline(slug=slug, owner_screen_name=user, since_id=last_seen)
+        for user in users:
+            last = last_seen.get(user, None)
+            tweets += api.user_timeline(user_id=user, count=200, since_id=last)
     except tweepy.error.RateLimitError:
         logger.info('Rate limited')
     logger.info('{} new tweets'.format(len(tweets)))
 
+    metadata = {}
     for t in tweets:
         user = t.user.screen_name
+        user_id = t.user.id
 
         urls = t.entities['urls']
         if hasattr(t, 'retweeted_status'):
@@ -47,15 +59,17 @@ def main():
         if hasattr(t, 'quoted_status'):
             urls += t.quoted_status.entities['urls']
 
-        for url in urls:
-            url = url['expanded_url']
+        urls = [url['expanded_url'] for url in urls]
+        for url in set(urls):
             if util.is_twitter_url(url): continue
 
             try:
-                meta = get_metadata(url)
+                if url not in metadata:
+                    metadata[url] = get_metadata(url)
+                meta = metadata[url]
             except Exception as e:
                 logger.info('Error getting metadata for {}: {}'.format(url, e))
-                continue
+                meta = {'url': url}
 
             url = meta['url']
             if util.is_twitter_url(url): continue
@@ -63,17 +77,21 @@ def main():
             logger.info('@{}: {}'.format(user, url))
             db.inc(url, user)
 
-        if last_seen is None or t.id > last_seen: last_seen = t.id
+        last = last_seen.get(user_id, None)
+        last_updated[user_id] = now
+        if last is None or t.id > last: last_seen[user_id] = t.id
 
     with open('data/last_seen', 'w') as f:
-        f.write(str(last_seen))
+        json.dump(last_seen, f)
+    with open('data/last_updated', 'w') as f:
+        json.dump(last_updated, f)
 
     # Compile RSS
     fg = FeedGenerator()
     fg.link(href=config.URL)
     fg.description('twitter chitter')
     fg.title('twitter chitter')
-    urls = db.since(last_updated, min_count=config.MIN_COUNT)
+    urls = db.since(last_update, min_count=config.MIN_COUNT)
     if urls:
         try:
             feed = json.load(open('data/feed'))
@@ -108,8 +126,6 @@ def main():
 
         fg.rss_file(config.RSS_PATH)
 
-        with open('data/last_updated', 'w') as f:
-            f.write(str(datetime.now().timestamp()))
         with open('data/feed', 'w') as f:
             json.dump(feed, f)
     logger.info('Done')
