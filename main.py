@@ -29,24 +29,25 @@ def main():
     last_seen = util.try_load_json('data/last_seen')
     last_updated = util.try_load_json('data/last_updated')
     last_update = max(last_updated.values()) if last_updated else 0
+    logger.info('Last updated: {}'.format(last_update))
 
-    users = list(tweepy.Cursor(api.friends_ids).items())
+    users = [str(u_id) for u_id in tweepy.Cursor(api.friends_ids).items()]
     for l in config.LISTS:
         user, slug = l.split('/')
-        users += [u.id for u in tweepy.Cursor(api.list_members, slug=slug, owner_screen_name=user).items()]
+        users += [str(u.id) for u in tweepy.Cursor(api.list_members, slug=slug, owner_screen_name=user).items()]
     users = set(users)
-    users = {u: last_updated.get(u) for u in users}
-    users = sorted(list(users), key=lambda u: last_seen.get(u, -1))
+    users = {u: last_updated.get(u, -1) for u in users}
+    users = sorted(list(users), key=lambda u: users[u])
     logger.info('{} users'.format(len(users)))
 
     metadata = {}
     try:
-        for user in users:
-            last = last_seen.get(user, None)
-            tweets = api.user_timeline(user_id=user, count=200, since_id=last)
+        for user_id in users:
+            last = last_seen.get(user_id, None)
+            logger.info('Fetching user {}, last fetched id: {}'.format(user_id, last))
+            tweets = api.user_timeline(user_id=user_id, count=200, since_id=last)
             for t in tweets:
                 user = t.user.screen_name
-                user_id = t.user.id
 
                 urls = t.entities['urls']
                 if hasattr(t, 'retweeted_status'):
