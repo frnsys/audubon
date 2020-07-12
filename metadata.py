@@ -13,7 +13,7 @@ def _get(d, *keys, default=None):
 def get_metadata(url):
     resp = requests.get(url, headers={
         'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:64.0) Gecko/20100101 Firefox/64.0',
-    })
+    }, timeout=10)
     resp.raise_for_status()
 
     html = lxml.html.fromstring(resp.content.decode('utf8'))
