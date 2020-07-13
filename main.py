@@ -74,9 +74,9 @@ def main():
                     db.inc(url, user)
 
                 last = last_seen.get(user_id, None)
-                last_updated[user_id] = now
                 if last is None or t.id > last: last_seen[user_id] = t.id
 
+            last_updated[user_id] = now
             with open('data/last_seen', 'w') as f:
                 json.dump(last_seen, f)
             with open('data/last_updated', 'w') as f:
