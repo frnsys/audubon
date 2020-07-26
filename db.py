@@ -32,6 +32,10 @@ class Database:
         users, = self.cur.execute('SELECT users FROM urls WHERE url == ?', (url,)).fetchone()
         return users.split(',') if users else []
 
+    def search(self, query):
+        query = '%{}%'.format(query)
+        return self.cur.execute('SELECT users, url, last_seen FROM urls WHERE url LIKE ?', (query,)).fetchall()
+
 
 if __name__ == '__main__':
     db = Database('data/db')
