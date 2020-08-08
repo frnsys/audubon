@@ -45,22 +45,21 @@ def main():
         for user_id in users:
             last = last_seen.get(user_id, None)
             logger.info('Fetching user {}, last fetched id: {}'.format(user_id, last))
-            tweets = api.user_timeline(user_id=user_id, count=200, since_id=last)
+            tweets = api.user_timeline(user_id=user_id, count=200, since_id=last, tweet_mode='extended')
             for t in tweets:
                 user = t.user.screen_name
 
-                urls = t.entities['urls']
-                if hasattr(t, 'retweeted_status'):
-                    urls += t.retweeted_status.entities['urls']
-                if hasattr(t, 'quoted_status'):
-                    urls += t.quoted_status.entities['urls']
+                urls = [url['expanded_url'] for url in t.entities['urls']]
+                for attr in ['retweeted_status', 'quoted_status']:
+                    if hasattr(t, attr):
+                        urls += [url['expanded_url'] for url in getattr(t, attr).entities['urls']]
 
-                urls = [url['expanded_url'] for url in urls]
                 for url in set(urls):
                     if util.is_twitter_url(url): continue
 
                     try:
                         if url not in metadata:
+                            logger.info('Fetching metadata: {}'.format(url))
                             metadata[url] = get_metadata(url)
                         meta = metadata[url]
                     except Exception as e:
