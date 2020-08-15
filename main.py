@@ -45,7 +45,12 @@ def main():
         for user_id in users:
             last = last_seen.get(user_id, None)
             logger.info('Fetching user {}, last fetched id: {}'.format(user_id, last))
-            tweets = api.user_timeline(user_id=user_id, count=200, since_id=last, tweet_mode='extended')
+            try:
+                tweets = api.user_timeline(user_id=user_id, count=200, since_id=last, tweet_mode='extended')
+            except tweepy.TweepError:
+                logger.error('Failed to fetch tweets for user {}, their tweets may be protected'.format(user_id))
+                continue
+
             for t in tweets:
                 user = t.user.screen_name
 
