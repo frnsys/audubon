@@ -54,10 +54,17 @@ def main():
             for t in tweets:
                 user = t.user.screen_name
 
+                sub_statuses = []
                 urls = [url['expanded_url'] for url in t.entities['urls']]
                 for attr in ['retweeted_status', 'quoted_status']:
                     if hasattr(t, attr):
-                        urls += [url['expanded_url'] for url in getattr(t, attr).entities['urls']]
+                        sub_status = getattr(t, attr)
+                        urls += [url['expanded_url'] for url in sub_status.entities['urls']]
+                        sub_statuses.append({
+                            'id': sub_status.id_str,
+                            'user': sub_status.user.screen_name,
+                            'text': sub_status.full_text,
+                        })
 
                 for url in set(urls):
                     if util.is_twitter_url(url): continue
@@ -76,6 +83,7 @@ def main():
 
                     logger.info('@{}: {}'.format(user, url))
                     db.inc(url, user)
+                    db.add_context(t.id_str, url, user, t.full_text, sub_statuses)
 
                 last = last_seen.get(user_id, None)
                 if last is None or t.id > last: last_seen[user_id] = t.id
