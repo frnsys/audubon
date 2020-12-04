@@ -36,7 +36,7 @@ class Database:
     def add_context(self, id, url, user, text, sub):
         key = '{}-{}'.format(id, md5(url.encode('utf8')).hexdigest())
         sub = json.dumps(sub)
-        self.cur.execute('INSERT INTO context VALUES (?, ?, ?, ?, ?, ?)', (key, id, url, user, text, sub))
+        self.cur.execute('INSERT OR IGNORE INTO context VALUES (?, ?, ?, ?, ?, ?)', (key, id, url, user, text, sub))
 
     def since(self, timestamp, min_count=1):
         return self.cur.execute('SELECT * FROM urls WHERE last_seen >= ? AND count >= ?',

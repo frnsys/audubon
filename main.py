@@ -102,7 +102,7 @@ def main():
     fg.link(href=config.URL)
     fg.description('twitter chitter')
     fg.title('twitter chitter')
-    urls = db.since(last_update, min_count=config.MIN_COUNT)
+    urls = db.since(last_update, min_count=config.MIN_COUNT)[:config.MAX_ITEMS]
     if urls:
         try:
             feed = json.load(open('data/feed'))
