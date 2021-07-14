@@ -1,10 +1,9 @@
 import sys
 from db import Database
-from datetime import datetime
 
 if __name__ == '__main__':
     query = sys.argv[1]
-    db = Database('data/db')
+    db = Database('data/main/db')
     for result in db.search(query):
         print(result['url'])
         print('users: ', ', '.join(result['users']))

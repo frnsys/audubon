@@ -2,6 +2,7 @@ import json
 import sqlite3
 from hashlib import md5
 from datetime import datetime
+from collections import defaultdict
 
 class Database:
     def __init__(self, path):
@@ -38,9 +39,36 @@ class Database:
         sub = json.dumps(sub)
         self.cur.execute('INSERT OR IGNORE INTO context VALUES (?, ?, ?, ?, ?, ?)', (key, id, url, user, text, sub))
 
-    def since(self, timestamp, min_count=1):
-        return self.cur.execute('SELECT * FROM urls WHERE last_seen >= ? AND count >= ?',
-                                (timestamp, min_count)).fetchall()
+    def since(self, timestamp, min_count=1, with_context=False):
+        if with_context:
+            s = 'SELECT urls.*, context.user, context.text, context.sub FROM urls INNER JOIN context \
+                ON urls.url=context.url WHERE urls.last_seen >= ? AND urls.count >= ?'
+            results = self.cur.execute(s, (timestamp, min_count)).fetchall()
+            grouped = {}
+            for url, users, count, last_seen, user, text, sub in results:
+                if url not in grouped:
+                    grouped[url] = {
+                        'url': url,
+                        'users': users,
+                        'count': count,
+                        'last_seen': last_seen,
+                        'contexts': []
+                    }
+                grouped[url]['contexts'].append({
+                    'user': user,
+                    'text': text,
+                    'sub': json.loads(sub)
+                })
+            return sorted(grouped.values(), key=lambda r: r['last_seen'])
+        else:
+            s = 'SELECT * FROM urls WHERE last_seen >= ? AND count >= ?'
+            results = self.cur.execute(s, (timestamp, min_count)).fetchall()
+            return [{
+                'url': url,
+                'users': users,
+                'count': count,
+                'last_seen': last_seen
+            } for url, users, count, last_seen in results]
 
     def users(self, url):
         users, = self.cur.execute('SELECT users FROM urls WHERE url == ?', (url,)).fetchone()
