@@ -41,11 +41,11 @@ class Database:
 
     def since(self, timestamp, min_count=1, with_context=False):
         if with_context:
-            s = 'SELECT urls.*, context.user, context.text, context.sub FROM urls INNER JOIN context \
+            s = 'SELECT urls.*, context.id, context.user, context.text, context.sub FROM urls INNER JOIN context \
                 ON urls.url=context.url WHERE urls.last_seen >= ? AND urls.count >= ?'
             results = self.cur.execute(s, (timestamp, min_count)).fetchall()
             grouped = {}
-            for url, users, count, last_seen, user, text, sub in results:
+            for url, users, count, last_seen, id, user, text, sub in results:
                 if url not in grouped:
                     grouped[url] = {
                         'url': url,
@@ -55,6 +55,7 @@ class Database:
                         'contexts': []
                     }
                 grouped[url]['contexts'].append({
+                    'id': id,
                     'user': user,
                     'text': text,
                     'sub': json.loads(sub)
@@ -77,27 +78,26 @@ class Database:
     def search(self, query):
         results = []
         query = '%{}%'.format(query)
-        matches = self.cur.execute('SELECT users, url, last_seen FROM urls WHERE url LIKE ?', (query,)).fetchall()
-        for users, url, timestamp in matches:
-            context = self.cur.execute('SELECT id, user, text, sub FROM context WHERE url == ?', (url,)).fetchall()
-
-            tweets = []
-            for id, user, text, sub in context:
-                subs = json.loads(sub)
-                tweets.append({
-                    'id': id,
-                    'user': user,
-                    'text': text,
-                    'sub': subs
-                })
-
-            results.append({
-                'url': url,
-                'users': users.split(','),
-                'datetime': datetime.fromtimestamp(timestamp),
-                'timestamp': timestamp,
-                'tweets': tweets
+        s = 'SELECT urls.*, context.id, context.user, context.text, context.sub FROM urls INNER JOIN context \
+            ON urls.url=context.url WHERE urls.url LIKE ?'
+        results = self.cur.execute(s, (query,)).fetchall()
+        grouped = {}
+        for url, users, count, last_seen, id, user, text, sub in results:
+            if url not in grouped:
+                grouped[url] = {
+                    'url': url,
+                    'users': users,
+                    'count': count,
+                    'last_seen': last_seen,
+                    'contexts': []
+                }
+            grouped[url]['contexts'].append({
+                'id': id,
+                'user': user,
+                'text': text,
+                'sub': json.loads(sub)
             })
+        return sorted(grouped.values(), key=lambda r: r['last_seen'])
         return results
 
 

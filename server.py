@@ -4,6 +4,7 @@ import re
 import argparse
 from db import Database
 from datetime import datetime, timedelta
+from urllib.parse import urlparse, parse_qs
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 LINK_RE = re.compile('(https:\/\/t.co\/[A-Za-z0-9]+)')
@@ -15,11 +16,18 @@ args = parser.parse_args()
 class AudubonRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         db = Database('data/main/db')
-        cutoff = datetime.now() - timedelta(days=30)
-        recent = db.since(cutoff.timestamp(), min_count=2, with_context=True)
+
+        params = parse_qs(urlparse(self.path).query)
+        query = params.get('query')
+        if query is not None:
+            query = query[0]
+            results = db.search(query)
+        else:
+            cutoff = datetime.now() - timedelta(days=2)
+            results = db.since(cutoff.timestamp(), min_count=2, with_context=True)
 
         # Reverse chron
-        recent.reverse()
+        results.reverse()
 
         self.send_response(200)
         self.send_header('Content-type', 'text/html')
@@ -61,23 +69,39 @@ class AudubonRequestHandler(BaseHTTPRequestHandler):
                         ul, li {
                             list-style-type: none;
                         }
+                        form {
+                            width: 100%;
+                            max-width: 720px;
+                            margin: 1em auto;
+                            display: flex;
+                        }
+                        form input[type="text"] {
+                            flex: 1;
+                            margin-right: 0.5em;
+                        }
                     </style>
                 </head>
-                <body>''']
+                <body>
+                    <form method="get" action="/">
+                        <input type="text" placeholder="Search for url" name="query" />
+                        <input type="submit" value="Search">
+                    </form>
+                ''']
 
 
-        for item in recent:
+        for item in results:
             html.append('''
                 <article>
                     <h4><a href="{href}">{href}</a></h4>'''.format(href=item['url']))
             for c in item['contexts']:
                 html.append('''
                     <div class="context">
-                        <div class="user">{user}</div>
+                        <div class="user"><a href="https://twitter.com/i/web/status/{id}">{user}</a></div>
                         {text}
                         <ul class="subs">{subs}</ul>
                     </div>
                 '''.format(
+                    id=c['id'],
                     user=c['user'],
                     text=LINK_RE.sub(r'<a href="\1">\1</a>', c['text']),
                     subs='\n'.join('<li><em class="user">{user}</em>: {text}</li>'.format(
