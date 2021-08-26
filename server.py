@@ -180,7 +180,7 @@ class AudubonRequestHandler(BaseHTTPRequestHandler):
                     id=t['id'],
                     user=t['user'],
                     text=t['text'],
-                    retweeters=' '.join('<span class="user">{}</span>'.format(u) for u in t['retweeters'])))
+                    retweeters=' '.join('<span class="user">{}</span>'.format(u) for u in set(t['retweeters']))))
             html.append('</article>')
 
         html.append('</body></html>')
