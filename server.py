@@ -13,6 +13,42 @@ parser = argparse.ArgumentParser(description='A simple server to view saved link
 parser.add_argument('-p', '--port', type=int, dest='PORT', default=8888, help='Port for server')
 args = parser.parse_args()
 
+
+def process_contexts(contexts):
+    tweets = {}
+    retweets = {}
+    text_to_id = {} # For deduping tweets
+    for c in contexts:
+        # Group the same retweets together
+        if c['text'].startswith('RT @'):
+            for s in c['sub']:
+                id = s['id']
+                if id not in retweets:
+                    retweets[id] = {
+                        'id': id,
+                        'user': s['user'],
+                        'text': make_links(s['text']),
+                        'retweeters': []
+                    }
+                retweets[id]['retweeters'].append(c['user'])
+        else:
+            text = c['text']
+            if text in text_to_id:
+                id = text_to_id[text]
+                tweets[id]['repeats'] += 1
+            else:
+                id = c['id']
+                text_to_id[text] = id
+                tweets[id] = c
+                tweets[id]['text']  = make_links(c['text'])
+                tweets[id]['repeats'] = 0
+    return tweets.values(), retweets.values()
+
+
+def make_links(text):
+    return LINK_RE.sub(r'<a href="\1">\1</a>', text)
+
+
 class AudubonRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         db = Database('data/main/db')
@@ -38,6 +74,8 @@ class AudubonRequestHandler(BaseHTTPRequestHandler):
             <html>
                 <head>
                     <meta charset="utf8">
+                    <meta name="viewport" content="width=device-width,initial-scale=1">
+                    <title>audubon</title>
                     <style>
                         html {
                             overflow-x: hidden;
@@ -56,15 +94,30 @@ class AudubonRequestHandler(BaseHTTPRequestHandler):
                             background: #fff;
                         }
                         .user {
-                            color: #888;
+                            color: #fff;
+                            background: #333;
+                            display: inline-block;
+                            padding: 0 0.2em;
+                            border-radius: 0.2em;
                         }
                         .context {
                             padding: 0.5em;
-                            background: #f0f0f0;
                             margin-bottom: 1em;
+                            background: #d0e5f2;
+                            border-radius: 0.2em;
+                        }
+                        .meta {
+                            display: flex;
+                            justify-content: space-between;
+                            font-size: 0.8em;
+                            margin: 1em 0 0;
+                        }
+                        .repeats {
+                            font-style: italic;
+                            color: #888;
                         }
                         a {
-                            color: blue;
+                            color: #1e5ae8;
                         }
                         ul, li {
                             list-style-type: none;
@@ -93,21 +146,41 @@ class AudubonRequestHandler(BaseHTTPRequestHandler):
             html.append('''
                 <article>
                     <h4><a href="{href}">{href}</a></h4>'''.format(href=item['url']))
-            for c in item['contexts']:
+            tweets, retweets = process_contexts(item['contexts'])
+            for t in tweets:
                 html.append('''
                     <div class="context">
-                        <div class="user"><a href="https://twitter.com/i/web/status/{id}">{user}</a></div>
+                        <div class="user">{user}</div>
                         {text}
                         <ul class="subs">{subs}</ul>
+                        <div class="meta">
+                            <div class="repeats">{repeats}</div>
+                            <a href="https://twitter.com/i/web/status/{id}">Permalink</a>
+                        </div>
                     </div>
                 '''.format(
-                    id=c['id'],
-                    user=c['user'],
-                    text=LINK_RE.sub(r'<a href="\1">\1</a>', c['text']),
+                    id=t['id'],
+                    user=t['user'],
+                    text=t['text'],
+                    repeats='Repeats {} times'.format(t['repeats']) if t['repeats'] > 0 else '',
                     subs='\n'.join('<li><em class="user">{user}</em>: {text}</li>'.format(
                         user=s['user'],
-                        text=LINK_RE.sub(r'<a href="\1">\1</a>', s['text'])) for s in c['sub'])
-                ))
+                        text=LINK_RE.sub(r'<a href="\1">\1</a>', s['text'])) for s in t['sub'])))
+            for t in retweets:
+                html.append('''
+                    <div class="context">
+                        <div class="user">{user}</div>
+                        {text}
+                        <div class="meta">
+                            <div class="retweeters">Retweeted by: {retweeters}</div>
+                            <a href="https://twitter.com/i/web/status/{id}">Permalink</a>
+                        </div>
+                    </div>
+                '''.format(
+                    id=t['id'],
+                    user=t['user'],
+                    text=t['text'],
+                    retweeters=' '.join('<span class="user">{}</span>'.format(u) for u in t['retweeters'])))
             html.append('</article>')
 
         html.append('</body></html>')
