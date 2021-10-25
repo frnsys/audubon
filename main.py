@@ -117,7 +117,7 @@ def process_feed(api, feed_conf, friends_cache, users_cache, urls_cache):
     fg.description('twitter chitter')
     fg.title('twitter chitter')
     feed_path = os.path.join(data_dir, 'feed')
-    results = db.since(last_update, min_count=feed_conf['min_count'])[:config.MAX_ITEMS]
+    results = db.since(last_update, min_count=feed_conf['min_count'])
 
     if results:
         try:
@@ -146,7 +146,7 @@ def process_feed(api, feed_conf, friends_cache, users_cache, urls_cache):
                 'pubDate': datetime.now(tz.tzlocal()).isoformat()
             })
 
-        for item in feed[::-1]:
+        for item in feed[::-1][:config.MAX_ITEMS]:
             fe = fg.add_entry()
             fe.title(item['title'])
             fe.link(href=item['link'])
