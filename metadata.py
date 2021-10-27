@@ -1,6 +1,9 @@
 import requests
 import lxml.html
 
+headers = {
+    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:64.0) Gecko/20100101 Firefox/64.0',
+}
 
 def _get(d, *keys, default=None):
     for k in keys:
@@ -11,9 +14,13 @@ def _get(d, *keys, default=None):
 
 
 def get_metadata(url):
-    resp = requests.get(url, headers={
-        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:64.0) Gecko/20100101 Firefox/64.0',
-    }, timeout=10)
+    resp = requests.head(url, headers=headers, timeout=5)
+    resp.raise_for_status()
+
+    if 'text/html' not in resp.headers.get('Content-Type'):
+        return {'url': url}
+
+    resp = requests.get(url, headers=headers, timeout=10)
     resp.raise_for_status()
 
     html = lxml.html.fromstring(resp.content.decode('utf8'))
