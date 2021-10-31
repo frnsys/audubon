@@ -32,6 +32,8 @@ def process_feed(api, feed_conf, friends_cache, users_cache, urls_cache):
     last_update = max(last_updated.values()) if last_updated else 0
     logger.info('Last updated: {}'.format(last_update))
 
+    compile_rss(db, last_update, data_dir, feed_conf)
+
     if 'friends' not in friends_cache:
         friends_cache['friends'] = [str(u_id) for u_id in tweepy.Cursor(api.friends_ids).items()]
     users = friends_cache['friends']
@@ -48,7 +50,7 @@ def process_feed(api, feed_conf, friends_cache, users_cache, urls_cache):
 
     try:
         keywords = feed_conf.get('keywords', [])
-        for user_id in users:
+        for i, user_id in enumerate(users):
             last = last_seen.get(user_id, None)
             logger.info('Fetching user {}, last fetched id: {}'.format(user_id, last))
             try:
@@ -108,8 +110,18 @@ def process_feed(api, feed_conf, friends_cache, users_cache, urls_cache):
             with open(last_updated_path, 'w') as f:
                 json.dump(last_updated, f)
 
+            if i % 100 == 0:
+                compile_rss(db, last_update, data_dir, feed_conf)
+
     except tweepy.error.RateLimitError:
         logger.info('Rate limited')
+
+    compile_rss(db, last_update, data_dir, feed_conf)
+    logger.info('Done: {}'.format(feed_conf['id']))
+
+
+def compile_rss(db, last_update, data_dir, feed_conf):
+    logger.info('Saving RSS...')
 
     # Compile RSS
     fg = FeedGenerator()
@@ -119,12 +131,12 @@ def process_feed(api, feed_conf, friends_cache, users_cache, urls_cache):
     feed_path = os.path.join(data_dir, 'feed')
     results = db.since(last_update, min_count=feed_conf['min_count'])
 
-    if results:
-        try:
-            feed = json.load(open(feed_path))
-        except FileNotFoundError:
-            feed = []
+    try:
+        feed = json.load(open(feed_path))
+    except FileNotFoundError:
+        feed = []
 
+    if results:
         seen = [i['link'] for i in feed]
 
         for res in results:
@@ -140,24 +152,25 @@ def process_feed(api, feed_conf, friends_cache, users_cache, urls_cache):
                 continue
 
             feed.append({
-                'title': meta['title'],
+                'title': meta.get('title', '(No title)'),
                 'link': url,
-                'description': '[Saved by {}]\t{}'.format(users, meta['description']),
+                'description': '[Saved by {}]\t{}'.format(users, meta.get('description', '(No description)')),
                 'pubDate': datetime.now(tz.tzlocal()).isoformat()
             })
 
-        for item in feed[::-1][:config.MAX_ITEMS]:
-            fe = fg.add_entry()
-            fe.title(item['title'])
-            fe.link(href=item['link'])
-            fe.description(item['description'])
-            fe.pubDate(item['pubDate'])
+    for item in feed[::-1][:config.MAX_ITEMS]:
+        fe = fg.add_entry()
+        fe.title(item['title'])
+        fe.link(href=item['link'])
+        fe.description(item['description'])
+        fe.pubDate(item['pubDate'])
 
-        fg.rss_file(feed_conf['rss_path'])
+    fg.rss_file(feed_conf['rss_path'])
 
-        with open(feed_path, 'w') as f:
-            json.dump(feed, f)
-    logger.info('Done: {}'.format(feed_conf['id']))
+    with open(feed_path, 'w') as f:
+        json.dump(feed, f)
+
+    logger.info('Saved RSS to: {}'.format(feed_conf['rss_path']))
 
 
 def main():
