@@ -162,7 +162,7 @@ def compile_rss(db, last_update, data_dir, feed_conf):
         fe = fg.add_entry()
         fe.title(item['title'])
         fe.link(href=item['link'])
-        fe.description(item['description'])
+        fe.description(util.remove_control_characters(item['description']))
         fe.pubDate(item['pubDate'])
 
     fg.rss_file(feed_conf['rss_path'])
